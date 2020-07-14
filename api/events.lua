@@ -17,11 +17,9 @@ local Events = Addon:NewModule('Events')
 
 --[[ Events ]]--
 
-Events.flaggedBags = {};
-
 function Events:OnEnable()
 	self.firstVisit = true
-	self.sizes, self.types = {}, {}
+	self.sizes, self.types, self.queue = {}, {}, {}
 
 	if REAGENTBANK_CONTAINER then
 		self:RegisterEvent('PLAYERREAGENTBANKSLOTS_CHANGED')
@@ -29,25 +27,15 @@ function Events:OnEnable()
 	end
 
 	self:RegisterEvent('BAG_UPDATE')
-	self:RegisterEvent('BAG_CLOSED', 'BAG_UPDATE')
-	self:RegisterEvent('BAG_UPDATE_DELAYED')
+	self:RegisterEvent('BAG_UPDATE_DELAYED', 'UpdateBags')
 	self:RegisterEvent('PLAYERBANKSLOTS_CHANGED')
 	self:RegisterMessage('CACHE_BANK_OPENED')
 	self:UpdateSize(BACKPACK_CONTAINER)
-	self:UpdateAllBags()
+	self:UpdateBags()
 end
 
-function Events:BAG_UPDATE(_, bag)
-	self.flaggedBags[bag] = true
-end
-
-function Events:BAG_UPDATE_DELAYED()
-	for bag in pairs(self.flaggedBags) do
-		self:UpdateBag(bag)
-		self:UpdateContent(bag)
-	end
-
-	self.flaggedBags = {}
+function Events:BAG_UPDATE(event, bag)
+	self.queue[bag] = true
 end
 
 function Events:PLAYERBANKSLOTS_CHANGED()
@@ -78,15 +66,15 @@ end
 
 --[[ API ]]--
 
-function Events:UpdateBag(bag)
-	if not self:UpdateSize(bag) then
-		self:UpdateType(bag)
-	end
-end
-
-function Events:UpdateAllBags()
+function Events:UpdateBags()
 	for bag = 1, NUM_BAG_SLOTS do
-		self:UpdateBag(bag)
+		if not self:UpdateSize(bag) then
+			self:UpdateType(bag)
+		end
+	end
+
+	for bag in pairs(self.queue) do
+		self:UpdateContent(bag)
 	end
 end
 
@@ -106,7 +94,7 @@ function Events:UpdateSize(bag)
 		local _, kind = GetContainerNumFreeSlots(bag)
 		self.types[bag] = kind
 		self.sizes[bag] = new
-
+		self.queue[bag] = nil
 		self:SendSignal('BAG_UPDATE_SIZE', bag)
 		return true
 	end
@@ -118,10 +106,11 @@ function Events:UpdateType(bag)
 
 	if old ~= new then
 		self.types[bag] = new
-		self:SendSignal('BAG_UPDATE_CONTENT', bag)
+		self:UpdateContent(bag)
 	end
 end
 
 function Events:UpdateContent(bag)
+	self.queue[bag] = nil
 	self:SendSignal('BAG_UPDATE_CONTENT', bag)
 end
