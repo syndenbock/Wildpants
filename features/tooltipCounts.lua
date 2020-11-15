@@ -108,8 +108,8 @@ local function AddOwners(tooltip, link)
 						bank = bank + FindItemCount(owner, BANK_CONTAINER, itemID)
 					end
 				else
-					local owned = GetItemCount(itemID, true)
-					local carrying = GetItemCount(itemID)
+					local owned = GetItemCount(itemID, true, false)
+					local carrying = GetItemCount(itemID, false, false)
 
 					bags = carrying - equip
 					bank = owned - carrying
