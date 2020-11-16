@@ -76,7 +76,7 @@ L.TipCountBags = '背包：%d'
 L.TipCountBank = '银行：%d'
 L.TipCountVault = '虚空仓库：%d'
 L.TipCountGuild = '公会：%d'
-L.TipDelimiter = '|'
+L.TipDelimiter = '||'
 
 --dialogs
 L.AskMafia = '问问大佬'

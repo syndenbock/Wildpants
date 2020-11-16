@@ -75,7 +75,7 @@ L.TipCountBags = 'Bolsas: %d'
 L.TipCountBank = 'Banco: %d'
 L.TipCountVault = 'Depósito: %d'
 L.TipCountGuild = 'Hermandad: %d'
-L.TipDelimiter = '|'
+L.TipDelimiter = '||'
 
 --dialogs
 L.AskMafia = 'Pregunta a La Mafia'

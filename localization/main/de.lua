@@ -58,7 +58,7 @@ L.TipCount1 = 'Angelegt: %d'
 L.TipCount2 = 'Taschen: %d'
 L.TipCount3 = 'Bank: %d'
 L.TipCount4 = 'Leerenlager: %d'
-L.TipDelimiter = '|'
+L.TipDelimiter = '||'
 
 --databroker plugin tooltips
 L.TipShowBank = '%s um die Bank umzuschalten'
