@@ -8,28 +8,11 @@ local L = LibStub('AceLocale-3.0'):GetLocale(ADDON)
 local TooltipCounts = Addon:NewModule('TooltipCounts')
 
 local SILVER = '|cffc7c7cf%s|r'
-local LAST_BANK_SLOT = NUM_BAG_SLOTS + NUM_BANKBAGSLOTS
-local FIRST_BANK_SLOT = NUM_BAG_SLOTS + 1
 local TOTAL = SILVER:format(L.Total)
 
-local ItemText, ItemCount
-
+local initialized = false
 
 --[[ Adding Text ]]--
-
-local function FindItemCount(owner, bag, itemID)
-	local count = 0
-	local info = Addon:GetBagInfo(owner, bag)
-
-	for slot = 1, (info.count or 0) do
-		local id = Addon:GetItemID(owner, bag, slot)
-		if id == itemID then
-			count = count + (Addon:GetItemInfo(owner, bag, slot).count or 1)
-		end
-	end
-
-	return count
-end
 
 local function FormatCounts(color, ...)
 	local total, places = 0, 0
@@ -54,12 +37,100 @@ local function FormatCounts(color, ...)
 	return total, total > 0 and text
 end
 
+local function getPlayerCounts (ownerInfo, itemID)
+	local realm = ownerInfo.realm
+	local name = ownerInfo.name
+	local equip = Addon:GetPlayerItemCount(realm, name, 'equip', itemID)
+	local vault = Addon:GetPlayerItemCount(realm, name, 'vault', itemID)
+	local reagents = Addon:GetPlayerItemCount(realm, name, 'reagents', itemID)
+	local bagSlots = Addon:GetPlayerItemCount(realm, name, 'bagslots', itemID)
+	local bankBagSlots = Addon:GetPlayerItemCount(realm, name, 'bankbagslots', itemID)
+	local bags, bank
+
+	if ownerInfo.cached then
+		bags = Addon:GetPlayerItemCount(realm, name, 'bags', itemID)
+		bank = Addon:GetPlayerItemCount(realm, name, 'bank', itemID)
+	else
+		local total = GetItemCount(itemID, true, false)
+
+		bags = GetItemCount(itemID, false, false)
+
+		bank = total - bags - reagents - bankBagSlots
+		bags = bags - equip - bagSlots
+	end
+
+	return {
+		bags = bags,
+		bank = bank,
+		reagents = reagents,
+		equip = equip,
+		vault = vault,
+		bagSlots = bagSlots,
+		bankBagSlots = bankBagSlots,
+	}
+end
+
+local function createPlayerText (ownerInfo, itemID)
+	local color = Addon.Owners:GetColorString(ownerInfo)
+	local counts = getPlayerCounts(ownerInfo, itemID)
+	local count, text
+
+	if rawget(L, 'TipCountReagents') then
+		count, text = FormatCounts(color,
+				L.TipCountEquip, counts.equip,
+				L.TipCountBags, counts.bags + counts.bagSlots,
+				L.TipCountBank, counts.bank + counts.bankBagSlots,
+				L.TipCountVault, counts.vault,
+				L.TipCountReagents, counts.reagents)
+	else
+		count, text = FormatCounts(color,
+				L.TipCountEquip, counts.equip,
+				L.TipCountBags, counts.bags + counts.bagSlots,
+				L.TipCountBank, counts.bank + counts.bankBagSlots + counts.reagents,
+				L.TipCountVault, counts.vault)
+	end
+
+	return count, text, color
+end
+
+local function createGuildText (ownerInfo, itemID)
+	local color = Addon.Owners:GetColorString(ownerInfo)
+	local count = Addon:GetGuildItemCount(ownerInfo.realm, ownerInfo.name, itemID)
+	local text
+
+	count, text = FormatCounts(color, L.TipCountGuild, count)
+
+	return count, text, color
+end
+
+local function addOwnerText (tooltip, owner, itemID)
+	local ownerInfo = Addon:GetOwnerInfo(owner)
+	local count, text, color
+
+	if ownerInfo.isguild then
+		if Addon.sets.countGuild then
+			count, text, color = createGuildText(ownerInfo, itemID)
+		else
+			count = 0
+		end
+	else
+		count, text, color = createPlayerText(ownerInfo, itemID)
+	end
+
+	if count > 0 then
+		tooltip:AddDoubleLine(Addon.Owners:GetIconString(ownerInfo, 12, 0, 0) .. ' ' .. color:format(ownerInfo.name), text)
+	end
+
+	return count
+end
+
 local function AddOwners(tooltip, link)
 	if not Addon.sets.tipCount or tooltip.__tamedCounts then
 		return
 	end
 
 	local itemID = tonumber(link and GetItemInfo(link) and link:match('item:(%d+)')) -- Blizzard doing craziness when doing GetItemInfo
+
 	if not itemID or itemID == HEARTHSTONE_ITEM_ID then
 		return
 	end
@@ -68,92 +139,15 @@ local function AddOwners(tooltip, link)
 	local total = 0
 
 	for owner in Addon:IterateOwners() do
-		local info = Addon:GetOwnerInfo(owner)
-		local color = Addon.Owners:GetColorString(info)
-		local count = ItemCount[owner] and ItemCount[owner][itemID]
-		local text
+		local count = addOwnerText(tooltip, owner, itemID)
 
-		if count then
-			text = ItemText[owner][itemID]
-		else
-			if not info.isguild then
-				local equip, vault
-				local bags, bank, reagents, bagSlots, bankBagSlots
-
-				if (Addon.GetItemCount) then
-					equip = Addon:GetItemCount(owner, 'equip', itemID)
-					vault = Addon:GetItemCount(owner, 'vault', itemID)
-					reagents = Addon:GetItemCount(owner, 'reagents', itemID)
-					bagSlots = Addon:GetItemCount(owner, 'bagslots', itemID)
-					bankBagSlots = Addon:GetItemCount(owner, 'bankbagslots', itemID)
-				else
-					equip = FindItemCount(owner, 'equip', itemID)
-					vault = FindItemCount(owner, 'vault', itemID)
-					reagents, bagSlots, bankBagSlots = 0, 0, 0
-				end
-
-				if info.cached then
-					if (Addon.GetItemCount) then
-						bags = Addon:GetItemCount(owner, 'bags', itemID) + bagSlots
-						bank = Addon:GetItemCount(owner, 'bank', itemID) + bankBagSlots
-					else
-						bags = 0
-						bank = 0
-
-						for i = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
-							bags = bags + FindItemCount(owner, i, itemID)
-						end
-
-						for i = FIRST_BANK_SLOT, LAST_BANK_SLOT do
-							bank = bank + FindItemCount(owner, i, itemID)
-						end
-
-						if REAGENTBANK_CONTAINER then
-							reagents = FindItemCount(owner, REAGENTBANK_CONTAINER, itemID)
-						end
-
-						bank = bank + FindItemCount(owner, BANK_CONTAINER, itemID)
-					end
-				else
-					local owned = GetItemCount(itemID, true, false)
-					local carrying = GetItemCount(itemID, false, false)
-
-					bags = carrying - equip
-					bank = owned - carrying - reagents
-				end
-
-				if rawget(L, 'TipCountReagents') then
-					count, text = FormatCounts(color, L.TipCountEquip, equip, L.TipCountBags, bags, L.TipCountBank, bank, L.TipCountVault, vault, L.TipCountReagents, reagents)
-				else
-					count, text = FormatCounts(color, L.TipCountEquip, equip, L.TipCountBags, bags, L.TipCountBank, bank + reagents, L.TipCountVault, vault)
-				end
-			elseif Addon.sets.countGuild then
-				local guild = 0
-				for i = 1, GetNumGuildBankTabs() do
-					guild = guild + FindItemCount(owner, i, itemID)
-				end
-
-				count, text = FormatCounts(color, L.TipCountGuild, guild)
-			else
-				count = 0
-			end
-
-			if info.cached then
-				ItemText[owner] = ItemText[owner] or {}
-				ItemText[owner][itemID] = text
-				ItemCount[owner] = ItemCount[owner] or {}
-				ItemCount[owner][itemID] = count
-			end
-		end
-
-		if count > 0 then
-			tooltip:AddDoubleLine(Addon.Owners:GetIconString(info, 12, 0, 0) .. ' ' .. color:format(info.name), text)
-			total = total + count
+		if (count > 0) then
 			players = players + 1
+			total = total + count
 		end
 	end
 
-	if players > 1 and total > 0 then
+	if players > 1 then
 		tooltip:AddDoubleLine(TOTAL, SILVER:format(total))
 	end
 
@@ -200,12 +194,9 @@ end
 --[[ Startup ]]--
 
 function TooltipCounts:OnEnable()
-	if Addon.sets.tipCount then
-		if not ItemText then
-			ItemText, ItemCount = {}, {}
-
-			HookTip(GameTooltip)
-			HookTip(ItemRefTooltip)
-		end
+	if Addon.sets.tipCount and not initialized then
+		initialized = true
+		HookTip(GameTooltip)
+		HookTip(ItemRefTooltip)
 	end
 end
