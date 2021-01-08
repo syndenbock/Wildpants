@@ -22,7 +22,7 @@ function Bank:SortItems()
 		SortBankBags()
 
 		if self.SortReagents then
-			self:Delay(.3, 'SortReagents')
+			self:Delay(1, 'SortReagents')
 		end
 	else
 		self:Super(Bank):SortItems(self)
